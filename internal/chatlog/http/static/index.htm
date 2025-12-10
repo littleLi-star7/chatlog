@@ -325,6 +325,44 @@
         color: var(--error-color);
         font-weight: bold;
       }
+
+      .chatlog-view {
+        font-family: inherit;
+        white-space: normal;
+      }
+
+      .chat-message {
+        background-color: var(--bg-white);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+
+      .chat-meta {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #2c3e50;
+      }
+
+      .chat-line {
+        margin-bottom: 8px;
+        line-height: 1.6;
+      }
+
+      .chat-line:last-child {
+        margin-bottom: 0;
+      }
+
+      .chat-image {
+        max-width: 260px;
+        max-height: 260px;
+        display: block;
+        margin-top: 8px;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      }
     </style>
   </head>
   <body>
@@ -608,6 +646,7 @@
 
           errorMessage.style.display = "none";
           errorMessage.textContent = "";
+          resultContainer.classList.remove("chatlog-view");
 
           try {
             // 获取当前活动的标签
@@ -616,6 +655,7 @@
               .getAttribute("data-tab");
             let url = "/api/v1/";
             let params = new URLSearchParams();
+            let chatlogFormatSelection = "";
 
             // 根据不同的标签构建不同的请求
             switch (activeTab) {
@@ -627,7 +667,8 @@
                 const keyword = document.getElementById("keyword").value;
                 const limit = document.getElementById("limit").value;
                 const offset = document.getElementById("offset").value;
-                const format = document.getElementById("format").value;
+                chatlogFormatSelection =
+                  document.getElementById("format").value;
 
                 // 验证必填项
                 if (!time || !talker) {
@@ -643,7 +684,8 @@
                 if (keyword) params.append("keyword", keyword);
                 if (limit) params.append("limit", limit);
                 if (offset) params.append("offset", offset);
-                if (format) params.append("format", format);
+                if (chatlogFormatSelection)
+                  params.append("format", chatlogFormatSelection);
                 break;
 
               case "contact":
@@ -677,6 +719,11 @@
                 break;
             }
 
+            const shouldRenderChatlogRich =
+              activeTab === "chatlog" &&
+              (chatlogFormatSelection === "" ||
+                chatlogFormatSelection === "text");
+
             // 添加参数到URL
             const apiUrl = params.toString()
               ? `${url}?${params.toString()}`
@@ -690,6 +737,7 @@
             resultWrapper.style.display = "block";
 
             // 显示加载中
+            resultContainer.classList.remove("chatlog-view");
             resultContainer.innerHTML = '<div class="loading">加载中</div>';
 
             // 发送请求
@@ -706,13 +754,20 @@
             if (contentType && contentType.includes("application/json")) {
               // 如果是JSON，格式化显示
               result = await response.json();
-              resultContainer.innerHTML = JSON.stringify(result, null, 2);
+              resultContainer.classList.remove("chatlog-view");
+              resultContainer.textContent = JSON.stringify(result, null, 2);
             } else {
               // 其他格式直接显示文本
               result = await response.text();
-              resultContainer.innerHTML = result;
+              if (shouldRenderChatlogRich) {
+                renderChatlogResult(result);
+              } else {
+                resultContainer.classList.remove("chatlog-view");
+                resultContainer.textContent = result;
+              }
             }
           } catch (error) {
+            resultContainer.classList.remove("chatlog-view");
             resultContainer.innerHTML = "";
             errorMessage.textContent = `查询出错: ${error.message}`;
             errorMessage.style.display = "block";
@@ -751,6 +806,92 @@
           .catch((err) => {
             console.error("复制失败:", err);
           });
+      }
+
+      function renderChatlogResult(rawText) {
+        const container = document.getElementById("api-result");
+        container.classList.add("chatlog-view");
+        container.innerHTML = "";
+
+        const lines = rawText.split("\n");
+        let currentMessage = createMessageWrapper();
+        let hasContent = false;
+
+        lines.forEach((line) => {
+          if (line.trim() === "") {
+            if (hasContent) {
+              container.appendChild(currentMessage);
+              currentMessage = createMessageWrapper();
+              hasContent = false;
+            }
+            return;
+          }
+
+          const lineElement = document.createElement("div");
+          if (!hasContent) {
+            lineElement.classList.add("chat-meta");
+            hasContent = true;
+          } else {
+            lineElement.classList.add("chat-line");
+          }
+          lineElement.appendChild(buildRichContent(line));
+          currentMessage.appendChild(lineElement);
+        });
+
+        if (hasContent) {
+          container.appendChild(currentMessage);
+        }
+
+        if (!container.hasChildNodes()) {
+          container.classList.remove("chatlog-view");
+          container.textContent = rawText || "暂无聊天记录";
+        }
+      }
+
+      function buildRichContent(text) {
+        const fragment = document.createDocumentFragment();
+        const mediaPattern =
+          /!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)/g;
+        let lastIndex = 0;
+        let match;
+
+        while ((match = mediaPattern.exec(text)) !== null) {
+          if (match.index > lastIndex) {
+            fragment.appendChild(
+              document.createTextNode(text.slice(lastIndex, match.index))
+            );
+          }
+
+          if (match[1] !== undefined) {
+            const img = document.createElement("img");
+            img.src = match[2];
+            img.alt = match[1] || "图片";
+            img.title = match[2];
+            img.className = "chat-image";
+            fragment.appendChild(img);
+          } else if (match[3] !== undefined) {
+            const link = document.createElement("a");
+            link.href = match[4];
+            link.textContent = match[3] || match[4];
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            fragment.appendChild(link);
+          }
+
+          lastIndex = mediaPattern.lastIndex;
+        }
+
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+
+        return fragment;
+      }
+
+      function createMessageWrapper() {
+        const wrapper = document.createElement("div");
+        wrapper.className = "chat-message";
+        return wrapper;
       }
     </script>
   </body>
