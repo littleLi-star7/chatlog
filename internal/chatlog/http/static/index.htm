@@ -384,6 +384,7 @@
             <div class="tab" data-tab="chatroom">群聊</div>
             <div class="tab" data-tab="contact">联系人</div>
             <div class="tab" data-tab="chatlog">聊天记录</div>
+            <div class="tab" data-tab="analyze">聊天分析</div>
           </div>
 
           <!-- 会话查询表单 -->
@@ -542,6 +543,41 @@
             </div>
           </div>
 
+          <!-- 聊天分析 -->
+          <div class="tab-content" id="analyze-tab">
+            <div class="api-description">
+              <p>
+                对某个联系人进行聊天统计分析，输出互动规模、活跃时间等指标。<span
+                  class="badge"
+                  >GET /api/v1/analyze/pair</span
+                >
+              </p>
+            </div>
+            <div class="form-group">
+              <label for="analysis-talker"
+                >聊天对象：<span class="required-field">*</span></label>
+              <input
+                type="text"
+                id="analysis-talker"
+                placeholder="wxid、群ID、备注名或昵称"
+              />
+            </div>
+            <div class="form-group">
+              <label for="analysis-time"
+                >时间范围：<span class="optional-param">默认近30天</span></label>
+              <input
+                type="text"
+                id="analysis-time"
+                placeholder="例如：2023-01-01~2023-03-01"
+              />
+            </div>
+            <div class="form-group">
+              <small
+                >统计内容：消息数、双方占比、活跃小时/星期、响应时间、媒体占比、关键词等。</small
+              >
+            </div>
+          </div>
+
           <button id="test-api">执行查询</button>
 
           <div id="result-wrapper" style="display: none; margin-top: 20px">
@@ -688,6 +724,21 @@
                   params.append("format", chatlogFormatSelection);
                 break;
 
+              case "analyze":
+                url += "analyze/pair";
+                const analysisTalker =
+                  document.getElementById("analysis-talker").value;
+                const analysisTime =
+                  document.getElementById("analysis-time").value;
+                if (!analysisTalker) {
+                  errorMessage.textContent = "错误: 请填写聊天对象！";
+                  errorMessage.style.display = "block";
+                  return;
+                }
+                params.append("talker", analysisTalker);
+                if (analysisTime) params.append("time", analysisTime);
+                break;
+
               case "contact":
                 url += "contact";
                 const contactKeyword =
@@ -723,6 +774,7 @@
               activeTab === "chatlog" &&
               (chatlogFormatSelection === "" ||
                 chatlogFormatSelection === "text");
+            const expectJSON = activeTab === "analyze";
 
             // 添加参数到URL
             const apiUrl = params.toString()

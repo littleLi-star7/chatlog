@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/sjzar/chatlog/internal/analysis"
 	"github.com/sjzar/chatlog/internal/errors"
 	"github.com/sjzar/chatlog/pkg/util"
 	"github.com/sjzar/chatlog/pkg/util/dat2img"
@@ -59,6 +61,7 @@ func (s *Service) initAPIRouter() {
 		api.GET("/contact", s.handleContacts)
 		api.GET("/chatroom", s.handleChatRooms)
 		api.GET("/session", s.handleSessions)
+		api.GET("/analyze/pair", s.handlePairAnalysis)
 	}
 }
 
@@ -153,6 +156,45 @@ func (s *Service) handleChatlog(c *gin.Context) {
 			c.Writer.Flush()
 		}
 	}
+}
+
+func (s *Service) handlePairAnalysis(c *gin.Context) {
+	q := struct {
+		Talker string `form:"talker" binding:"required"`
+		Time   string `form:"time"`
+	}{}
+
+	if err := c.BindQuery(&q); err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	if q.Talker == "" {
+		errors.Err(c, errors.InvalidArg("talker"))
+		return
+	}
+
+	var start, end time.Time
+	var ok bool
+	if q.Time == "" {
+		end = time.Now()
+		start = end.Add(-30 * 24 * time.Hour)
+	} else {
+		start, end, ok = util.TimeRangeOf(q.Time)
+		if !ok {
+			errors.Err(c, errors.InvalidArg("time"))
+			return
+		}
+	}
+
+	messages, err := s.db.GetMessages(start, end, q.Talker, "", "", 0, 0)
+	if err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	stats := analysis.ComputePairStats(q.Talker, messages, start, end)
+	c.JSON(http.StatusOK, stats)
 }
 
 func (s *Service) handleContacts(c *gin.Context) {
